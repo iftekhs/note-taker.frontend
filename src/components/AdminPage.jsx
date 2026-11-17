@@ -537,7 +537,7 @@ export function GroupsSection() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col items-start gap-2">
         <Label htmlFor="interest-filter">Interest</Label>
         <InterestSelect
           id="interest-filter"
