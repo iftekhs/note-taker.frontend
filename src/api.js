@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'note_taker_token';
+const API_BASE = import.meta.env.VITE_API_URL || '';
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY);
@@ -33,7 +34,7 @@ export async function api(path, { method = 'GET', body, params } = {}) {
     : '';
   const token = getToken();
 
-  const response = await fetch(`/api${path}${query ? `?${query}` : ''}`, {
+  const response = await fetch(`${API_BASE}/api${path}${query ? `?${query}` : ''}`, {
     method,
     headers: {
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
