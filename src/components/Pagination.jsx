@@ -29,7 +29,7 @@ export default function PaginationBar({
   total,
   onPage,
   showLabel = true,
-  fullWidth = false,
+  align = 'center',
 }) {
   const lastPage = Math.max(totalPages, 1);
   const goTo = (target) => (event) => {
@@ -41,7 +41,9 @@ export default function PaginationBar({
   return (
     <div className="space-y-2">
       <Pagination>
-        <PaginationContent className={fullWidth ? 'w-full justify-between' : undefined}>
+        <PaginationContent
+          className={align === 'right' ? 'justify-end' : align === 'left' ? 'justify-start' : undefined}
+        >
           <PaginationItem>
             <PaginationPrevious
               href="#"

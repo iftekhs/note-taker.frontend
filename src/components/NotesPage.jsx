@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import FormError from './FormError.jsx';
+import ListLoader from './ListLoader.jsx';
 import Pagination from './Pagination.jsx';
 import { Button } from './ui/button.jsx';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card.jsx';
@@ -139,38 +140,42 @@ export default function NotesPage({ user }) {
       </div>
 
       <FormError message={error} />
-      {loading && <p className="text-sm text-muted-foreground">Loading notes…</p>}
+      {loading ? (
+        <ListLoader label="Loading notes…" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {result.data.map((note) => (
+              <Card key={note._id}>
+                <CardHeader>
+                  <CardTitle className="text-base">{note.title}</CardTitle>
+                  <CardDescription>Updated {new Date(note.updatedAt).toLocaleString()}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-sm">{note.content}</p>
+                </CardContent>
+                <CardFooter className="justify-end gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => openEdit(note)}>
+                    Edit
+                  </Button>
+                  <ConfirmDialog
+                    trigger={<Button type="button" variant="destructive" size="sm">Delete</Button>}
+                    title={`Delete "${note.title}"?`}
+                    description="This permanently removes the note. This action cannot be undone."
+                    onConfirm={() => remove(note)}
+                  />
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        {result.data.map((note) => (
-          <Card key={note._id}>
-            <CardHeader>
-              <CardTitle className="text-base">{note.title}</CardTitle>
-              <CardDescription>Updated {new Date(note.updatedAt).toLocaleString()}</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="whitespace-pre-wrap text-sm">{note.content}</p>
-            </CardContent>
-            <CardFooter className="justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => openEdit(note)}>
-                Edit
-              </Button>
-              <ConfirmDialog
-                trigger={<Button type="button" variant="destructive" size="sm">Delete</Button>}
-                title={`Delete "${note.title}"?`}
-                description="This permanently removes the note. This action cannot be undone."
-                onConfirm={() => remove(note)}
-              />
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
+          {result.data.length === 0 && (
+            <p className="text-sm text-muted-foreground">No notes yet.</p>
+          )}
 
-      {!loading && result.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No notes yet.</p>
+          <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
+        </>
       )}
-
-      <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
 
       <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) closeCreate(); }}>
         <DialogContent className="sm:max-w-md">

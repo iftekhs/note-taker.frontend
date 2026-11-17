@@ -153,6 +153,41 @@ describe('NotesPage', () => {
     expect(within(alert).getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
+  it('shows only the loader while the notes list refreshes', async () => {
+    const original = api.getMockImplementation();
+    let finishReload;
+    let listCalls = 0;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/notes' && !options.method) {
+        listCalls += 1;
+        if (listCalls > 1) return new Promise((resolve) => { finishReload = resolve; });
+      }
+      return original(path, options);
+    });
+
+    render(<NotesPage user={user} />);
+    await screen.findByText('First note');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New note' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Title'), 'Second note');
+    await userEvent.type(within(dialog).getByLabelText('Content'), 'New content');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create note' }));
+
+    expect(await screen.findByText('Loading notes…')).toBeInTheDocument();
+    expect(screen.queryByText('First note')).not.toBeInTheDocument();
+
+    await act(async () => {
+      finishReload({
+        data: [note('n1', 'First note'), note('n2', 'Second note')],
+        total: 2,
+        totalPages: 1,
+      });
+    });
+    expect(await screen.findByText('Second note')).toBeInTheDocument();
+    expect(screen.queryByText('Loading notes…')).not.toBeInTheDocument();
+  });
+
   it('loads another page when pagination is used', async () => {
     mockNotesApi({ data: [note('n1', 'First note')], total: 21, totalPages: 3 });
     render(<NotesPage user={user} />);

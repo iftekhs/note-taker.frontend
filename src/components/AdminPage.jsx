@@ -3,6 +3,7 @@ import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import FormError from './FormError.jsx';
+import ListLoader from './ListLoader.jsx';
 import Pagination from './Pagination.jsx';
 import { Badge } from './ui/badge.jsx';
 import { Button } from './ui/button.jsx';
@@ -362,39 +363,43 @@ export function UsersSection() {
       </Dialog>
 
       <FormError message={error} />
-      {listLoading && <p className="text-sm text-muted-foreground">Loading users…</p>}
+      {listLoading ? (
+        <ListLoader label="Loading users…" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {result.data.map((user) => (
+              <Card key={user._id}>
+                <CardHeader>
+                  <CardTitle className="text-base">{user.name}</CardTitle>
+                  <CardDescription>{user.email}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role}</Badge>
+                  <InterestBadges interests={user.interests} />
+                </CardContent>
+                <CardFooter className="justify-end gap-2">
+                  <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
+                    Edit
+                  </Button>
+                  <ConfirmDialog
+                    trigger={<Button type="button" size="sm" variant="destructive">Delete</Button>}
+                    title={`Delete ${user.email}?`}
+                    description="Their notes and posts will also be deleted. This action cannot be undone."
+                    onConfirm={() => remove(user)}
+                  />
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {result.data.map((user) => (
-          <Card key={user._id}>
-            <CardHeader>
-              <CardTitle className="text-base">{user.name}</CardTitle>
-              <CardDescription>{user.email}</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role}</Badge>
-              <InterestBadges interests={user.interests} />
-            </CardContent>
-            <CardFooter className="justify-end gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
-                Edit
-              </Button>
-              <ConfirmDialog
-                trigger={<Button type="button" size="sm" variant="destructive">Delete</Button>}
-                title={`Delete ${user.email}?`}
-                description="Their notes and posts will also be deleted. This action cannot be undone."
-                onConfirm={() => remove(user)}
-              />
-            </CardFooter>
-          </Card>
-        ))}
-      </div>
+          {result.data.length === 0 && (
+            <p className="text-sm text-muted-foreground">No users found.</p>
+          )}
 
-      {!listLoading && result.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No users found.</p>
+          <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
+        </>
       )}
-
-      <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
     </div>
   );
 }
@@ -437,29 +442,33 @@ export function NotesSection() {
   return (
     <div className="space-y-6">
       <FormError message={error} />
-      {loading && <p className="text-sm text-muted-foreground">Loading notes…</p>}
+      {loading ? (
+        <ListLoader label="Loading notes…" />
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {result.data.map((note) => (
+              <Card key={note._id}>
+                <CardHeader>
+                  <CardTitle className="text-base">{note.title}</CardTitle>
+                  <CardDescription>
+                    owner {ownerNames[note.owner] || `#${shortId(note.owner)}`} · {new Date(note.updatedAt).toLocaleString()}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="whitespace-pre-wrap text-sm">{note.content}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {result.data.map((note) => (
-          <Card key={note._id}>
-            <CardHeader>
-              <CardTitle className="text-base">{note.title}</CardTitle>
-              <CardDescription>
-                owner {ownerNames[note.owner] || `#${shortId(note.owner)}`} · {new Date(note.updatedAt).toLocaleString()}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="whitespace-pre-wrap text-sm">{note.content}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+          {result.data.length === 0 && (
+            <p className="text-sm text-muted-foreground">No notes found.</p>
+          )}
 
-      {!loading && result.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No notes found.</p>
+          <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
+        </>
       )}
-
-      <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
     </div>
   );
 }
@@ -540,12 +549,11 @@ export function GroupsSection() {
       </div>
 
       <FormError message={error} />
-      {!interestsReady && !error && (
-        <p className="text-sm text-muted-foreground">Loading interests…</p>
-      )}
-      {loading && <p className="text-sm text-muted-foreground">Loading users…</p>}
-
-      {result.data[0] ? (
+      {!interestsReady && !error ? (
+        <ListLoader label="Loading interests…" />
+      ) : loading ? (
+        <ListLoader label="Loading users…" />
+      ) : result.data[0] ? (
         <div className="space-y-4">
           <Table>
             <TableHeader>
@@ -577,12 +585,12 @@ export function GroupsSection() {
               totalPages={totalPages}
               total={members.length}
               onPage={setPage}
-              fullWidth
+              align="right"
             />
           )}
         </div>
       ) : (
-        !loading && <p className="text-sm text-muted-foreground">No users found for this interest.</p>
+        <p className="text-sm text-muted-foreground">No users found for this interest.</p>
       )}
     </div>
   );

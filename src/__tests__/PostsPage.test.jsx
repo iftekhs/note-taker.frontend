@@ -133,6 +133,37 @@ describe('PostsPage', () => {
     await waitFor(() => expect(screen.queryByText('Loading your posts…')).not.toBeInTheDocument());
   });
 
+  it('shows only the loader while the posts list refreshes', async () => {
+    const original = api.getMockImplementation();
+    let finishReload;
+    let listCalls = 0;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/posts' && !options.method) {
+        listCalls += 1;
+        if (listCalls > 1) return new Promise((resolve) => { finishReload = resolve; });
+      }
+      return original(path, options);
+    });
+
+    render(<PostsPage user={user} />);
+    await screen.findByText('Public post');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New post' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Title'), 'Fresh post');
+    await userEvent.type(within(dialog).getByLabelText('Content'), 'Fresh content');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Publish post' }));
+
+    expect(await screen.findByText('Loading posts…')).toBeInTheDocument();
+    expect(screen.queryByText('Public post')).not.toBeInTheDocument();
+
+    await act(async () => {
+      finishReload({ data: [post('p2', 'Fresh post')], total: 1, totalPages: 1 });
+    });
+    expect(await screen.findByText('Fresh post')).toBeInTheDocument();
+    expect(screen.queryByText('Loading posts…')).not.toBeInTheDocument();
+  });
+
   it('paginates the all-posts list', async () => {
     mockPostsApi({ posts: [post('p1', 'Public post')], total: 15, totalPages: 2 });
     render(<PostsPage user={user} />);

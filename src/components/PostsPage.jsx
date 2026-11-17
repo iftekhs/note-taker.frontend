@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import FormError from './FormError.jsx';
+import ListLoader from './ListLoader.jsx';
 import Pagination from './Pagination.jsx';
 import { Badge } from './ui/badge.jsx';
 import { Button } from './ui/button.jsx';
@@ -138,41 +139,18 @@ export default function PostsPage({ user }) {
         </TabsList>
         <TabsContent value="all" className="mt-6 space-y-4" aria-busy={loading}>
           <FormError message={error} />
-          {loading && <p className="text-sm text-muted-foreground">Loading posts…</p>}
-          <div className="grid gap-4 sm:grid-cols-2">
-            {result.data.map((post) => (
-              <Card key={post._id}>
-                <CardHeader>
-                  <CardTitle className="text-base">{post.title}</CardTitle>
-                  <CardDescription>
-                    Author #{shortId(post.author)} · {new Date(post.createdAt).toLocaleString()}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-wrap text-sm">{post.content}</p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-          {!loading && result.data.length === 0 && (
-            <p className="text-sm text-muted-foreground">No posts yet.</p>
-          )}
-          <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
-        </TabsContent>
-        <TabsContent value="mine" className="mt-6 space-y-4" aria-busy={myLoading}>
-          <FormError message={myError} />
-          {myLoading && <p className="text-sm text-muted-foreground">Loading your posts…</p>}
-          {myResult && (
+          {loading ? (
+            <ListLoader label="Loading posts…" />
+          ) : (
             <>
-              <p className="text-sm text-muted-foreground">
-                {myResult.user?.name} · <Badge variant="secondary">{myResult.total} post(s)</Badge>
-              </p>
               <div className="grid gap-4 sm:grid-cols-2">
-                {myResult.data.map((post) => (
+                {result.data.map((post) => (
                   <Card key={post._id}>
                     <CardHeader>
                       <CardTitle className="text-base">{post.title}</CardTitle>
-                      <CardDescription>{new Date(post.createdAt).toLocaleString()}</CardDescription>
+                      <CardDescription>
+                        Author #{shortId(post.author)} · {new Date(post.createdAt).toLocaleString()}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <p className="whitespace-pre-wrap text-sm">{post.content}</p>
@@ -180,11 +158,42 @@ export default function PostsPage({ user }) {
                   </Card>
                 ))}
               </div>
-              {myResult.data.length === 0 && (
-                <p className="text-sm text-muted-foreground">You have not posted yet.</p>
+              {result.data.length === 0 && (
+                <p className="text-sm text-muted-foreground">No posts yet.</p>
               )}
-              <Pagination page={myPage} totalPages={myResult.totalPages} total={myResult.total} onPage={setMyPage} />
+              <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
             </>
+          )}
+        </TabsContent>
+        <TabsContent value="mine" className="mt-6 space-y-4" aria-busy={myLoading}>
+          <FormError message={myError} />
+          {myLoading ? (
+            <ListLoader label="Loading your posts…" />
+          ) : (
+            myResult && (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  {myResult.user?.name} · <Badge variant="secondary">{myResult.total} post(s)</Badge>
+                </p>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {myResult.data.map((post) => (
+                    <Card key={post._id}>
+                      <CardHeader>
+                        <CardTitle className="text-base">{post.title}</CardTitle>
+                        <CardDescription>{new Date(post.createdAt).toLocaleString()}</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="whitespace-pre-wrap text-sm">{post.content}</p>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+                {myResult.data.length === 0 && (
+                  <p className="text-sm text-muted-foreground">You have not posted yet.</p>
+                )}
+                <Pagination page={myPage} totalPages={myResult.totalPages} total={myResult.total} onPage={setMyPage} />
+              </>
+            )
           )}
         </TabsContent>
       </Tabs>

@@ -218,6 +218,42 @@ describe('UsersSection', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
   });
 
+  it('shows only the loader while the users list refreshes', async () => {
+    const original = api.getMockImplementation();
+    let finishReload;
+    let listCalls = 0;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/users' && !options.method && options.params?.limit === 10) {
+        listCalls += 1;
+        if (listCalls > 1) return new Promise((resolve) => { finishReload = resolve; });
+      }
+      return original(path, options);
+    });
+
+    render(<UsersSection />);
+    await screen.findByText('Alice');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New user' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Carol');
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'carol@example.com');
+    await userEvent.type(within(dialog).getByLabelText('Password'), 'Password123');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create user' }));
+
+    expect(await screen.findByText('Loading users…')).toBeInTheDocument();
+    expect(screen.queryByText('Alice')).not.toBeInTheDocument();
+
+    await act(async () => {
+      finishReload({
+        data: [...users, { _id: 'u3', name: 'Carol', email: 'carol@example.com', role: 'user', interests: [] }],
+        total: 3,
+        totalPages: 1,
+      });
+    });
+    expect(await screen.findByText('Carol')).toBeInTheDocument();
+    expect(screen.queryByText('Loading users…')).not.toBeInTheDocument();
+  });
+
   it('edits a user role, name, and interests in a dialog', async () => {
     render(<UsersSection />);
     await screen.findByText('Alice');
@@ -382,14 +418,11 @@ describe('GroupsSection', () => {
     expect(screen.queryByRole('cell', { name: 'Tech 1' })).not.toBeInTheDocument();
   });
 
-  it('paginates the users below the table at full width', async () => {
+  it('paginates the users below the table, aligned to the right', async () => {
     render(<GroupsSection />);
     await screen.findByRole('columnheader', { name: 'Name' });
     expect(screen.getByText(/Page 1 of 2 · 12 total/)).toBeInTheDocument();
-    expect(document.querySelector('[data-slot="pagination-content"]')).toHaveClass(
-      'w-full',
-      'justify-between',
-    );
+    expect(document.querySelector('[data-slot="pagination-content"]')).toHaveClass('justify-end');
 
     await userEvent.click(screen.getByRole('link', { name: 'Go to page 2' }));
 
