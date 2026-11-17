@@ -59,6 +59,7 @@ function SelectContent({
   children,
   position = "item-aligned",
   align = "center",
+  hideScrollButtons = false,
   ...props
 }) {
   return (
@@ -71,7 +72,7 @@ function SelectContent({
         align={align}
         {...props}
       >
-        <SelectScrollUpButton />
+        {!hideScrollButtons && <SelectScrollUpButton />}
         <SelectPrimitive.Viewport
           data-position={position}
           className={cn(
@@ -81,7 +82,7 @@ function SelectContent({
         >
           {children}
         </SelectPrimitive.Viewport>
-        <SelectScrollDownButton />
+        {!hideScrollButtons && <SelectScrollDownButton />}
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   )

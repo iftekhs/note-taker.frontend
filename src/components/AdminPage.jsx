@@ -17,10 +17,11 @@ import {
 import { Input } from './ui/input.jsx';
 import { Label } from './ui/label.jsx';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select.jsx';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './ui/table.jsx';
 
 const LIMIT = 10;
 const NOTES_LIMIT = 12;
-const GROUP_MEMBERS_LIMIT = 10;
+const USERS_TABLE_PAGE_SIZE = 10;
 
 function splitInterests(value) {
   return value
@@ -59,10 +60,17 @@ function RoleSelect({ id, value, onValueChange }) {
 function InterestSelect({ id, value, interests, onValueChange }) {
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger id={id} className="w-full">
+      <SelectTrigger id={id} className="min-w-48">
         <SelectValue />
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent
+        hideScrollButtons
+        position="popper"
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        avoidCollisions={false}
+      >
         {interests.map((interest) => (
           <SelectItem key={interest} value={interest}>
             {interest}
@@ -437,12 +445,10 @@ export function GroupsSection() {
   const [interests, setInterests] = useState([]);
   const [interestsReady, setInterestsReady] = useState(false);
   const [interest, setInterest] = useState(DEFAULT_INTEREST);
-  const [activeInterest, setActiveInterest] = useState(DEFAULT_INTEREST);
   const [result, setResult] = useState({ data: [] });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  // One page number per interest group, so changing one group never affects another.
-  const [groupPages, setGroupPages] = useState({});
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -458,7 +464,6 @@ export function GroupsSection() {
         setInterests(values);
         const initial = values.includes(DEFAULT_INTEREST) ? DEFAULT_INTEREST : values[0] ?? '';
         setInterest(initial);
-        setActiveInterest(initial);
         setInterestsReady(true);
       } catch (err) {
         if (active) setError(errorMessage(err));
@@ -471,102 +476,89 @@ export function GroupsSection() {
   }, []);
 
   const load = useCallback(async () => {
-    if (!interestsReady || !activeInterest) return;
+    if (!interestsReady || !interest) return;
     setLoading(true);
     setError('');
     try {
       // A single indexed interest filter returns one group. Request all its
-      // members (max 100 users exist) so the card can page them locally.
+      // members (max 100 users exist) so the table can page them locally.
       setResult(
         await api('/users/grouped-by-interests', {
-          params: { page: 1, limit: 100, interest: activeInterest },
+          params: { page: 1, limit: 100, interest },
         }),
       );
-      setGroupPages({});
+      setPage(1);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, [activeInterest, interestsReady]);
+  }, [interest, interestsReady]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  function applyFilter(event) {
-    event.preventDefault();
-    if (interest) setActiveInterest(interest);
-  }
-
-  function setGroupPage(groupId, page) {
-    setGroupPages((current) => ({ ...current, [groupId]: page }));
-  }
+  const members = result.data[0]?.users ?? [];
+  const totalPages = Math.max(1, Math.ceil(members.length / USERS_TABLE_PAGE_SIZE));
+  const visibleMembers = members.slice(
+    (page - 1) * USERS_TABLE_PAGE_SIZE,
+    page * USERS_TABLE_PAGE_SIZE,
+  );
 
   return (
     <div className="space-y-6">
-      <form onSubmit={applyFilter} className="flex flex-wrap items-end gap-3">
-        <Field id="interest-filter" label="Interest">
-          <InterestSelect
-            id="interest-filter"
-            value={interest}
-            interests={interests}
-            onValueChange={setInterest}
-          />
-        </Field>
-        <Button type="submit" disabled={loading || !interest}>Apply</Button>
-        <Badge variant="secondary" className="mb-0.5">Showing: {activeInterest || '—'}</Badge>
-      </form>
-
-      <FormError message={error} />
-      {loading && <p className="text-sm text-muted-foreground">Loading groups…</p>}
-
-      <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {result.data.map((group) => {
-          const members = group.users || [];
-          const totalPages = Math.max(1, Math.ceil(members.length / GROUP_MEMBERS_LIMIT));
-          const requestedPage = groupPages[group._id] ?? 1;
-          const currentPage = Math.min(requestedPage, totalPages);
-          const visibleMembers = members.slice(
-            (currentPage - 1) * GROUP_MEMBERS_LIMIT,
-            currentPage * GROUP_MEMBERS_LIMIT,
-          );
-
-          return (
-            <Card key={group._id}>
-              <CardHeader>
-                <CardTitle className="text-base">{group._id}</CardTitle>
-                <CardDescription>
-                  <Badge variant="secondary">{group.count} user(s)</Badge>
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <ul className="space-y-1 text-sm">
-                  {visibleMembers.map((member) => (
-                    <li key={member._id}>
-                      {member.name} <span className="text-muted-foreground">({member.email})</span>
-                    </li>
-                  ))}
-                </ul>
-                {members.length > GROUP_MEMBERS_LIMIT && (
-                  <div>
-                    <Pagination
-                      page={currentPage}
-                      totalPages={totalPages}
-                      total={members.length}
-                      onPage={(nextPage) => setGroupPage(group._id, nextPage)}
-                      showLabel={false}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Label htmlFor="interest-filter">Interest</Label>
+        <InterestSelect
+          id="interest-filter"
+          value={interest}
+          interests={interests}
+          onValueChange={setInterest}
+        />
       </div>
 
-      {!loading && result.data.length === 0 && (
-        <p className="text-sm text-muted-foreground">No groups found.</p>
+      <FormError message={error} />
+      {loading && <p className="text-sm text-muted-foreground">Loading users…</p>}
+
+      {result.data[0] ? (
+        <div className="space-y-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Email</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {visibleMembers.map((member) => (
+                <TableRow key={member._id}>
+                  <TableCell className="font-medium">{member.name}</TableCell>
+                  <TableCell className="text-muted-foreground">{member.email}</TableCell>
+                </TableRow>
+              ))}
+              {visibleMembers.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={2} className="text-center text-muted-foreground">
+                    No users found for this interest.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+
+          {totalPages > 1 && (
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={members.length}
+              onPage={setPage}
+              fullWidth
+            />
+          )}
+        </div>
+      ) : (
+        !loading && <p className="text-sm text-muted-foreground">No users found for this interest.</p>
       )}
     </div>
   );

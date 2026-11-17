@@ -24,7 +24,14 @@ function pageItems(page, lastPage) {
   return items;
 }
 
-export default function PaginationBar({ page, totalPages, total, onPage, showLabel = true }) {
+export default function PaginationBar({
+  page,
+  totalPages,
+  total,
+  onPage,
+  showLabel = true,
+  fullWidth = false,
+}) {
   const lastPage = Math.max(totalPages, 1);
   const goTo = (target) => (event) => {
     event.preventDefault();
@@ -35,7 +42,7 @@ export default function PaginationBar({ page, totalPages, total, onPage, showLab
   return (
     <div className="space-y-2">
       <Pagination>
-        <PaginationContent>
+        <PaginationContent className={fullWidth ? 'w-full justify-between' : undefined}>
           <PaginationItem>
             <PaginationPrevious
               href="#"

@@ -264,11 +264,9 @@ describe('NotesSection', () => {
 });
 
 describe('GroupsSection', () => {
-  it('lists every existing interest in the select and requests one indexed group', async () => {
+  it('lists every existing interest in the select and shows its users in a table', async () => {
     render(<GroupsSection />);
-    expect(
-      await screen.findByText('tech', { selector: '[data-slot="card-title"]' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('columnheader', { name: 'Name' })).toBeInTheDocument();
 
     expect(api).toHaveBeenCalledWith('/users', { params: { page: 1, limit: 100 } });
     expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
@@ -283,51 +281,50 @@ describe('GroupsSection', () => {
       'music',
       'tech',
     ]);
-    expect(
-      screen.queryByText('music', { selector: '[data-slot="card-title"]' }),
-    ).not.toBeInTheDocument();
 
-    expect(screen.getByText('Tech 1')).toBeInTheDocument();
-    expect(screen.getByText('Tech 10')).toBeInTheDocument();
-    expect(screen.queryByText('Tech 11')).not.toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Tech 1' })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: 'Tech 10' })).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Tech 11' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Music 1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Apply' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Showing:/)).not.toBeInTheDocument();
   });
 
-  it('applies a different interest from the select', async () => {
+  it('applies a different interest as soon as the select changes', async () => {
     render(<GroupsSection />);
-    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
+    await screen.findByRole('columnheader', { name: 'Name' });
 
     await userEvent.selectOptions(screen.getByLabelText('Interest'), 'music');
-    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
-    expect(
-      await screen.findByText('music', { selector: '[data-slot="card-title"]' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('cell', { name: 'Music 1' })).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
       params: { page: 1, limit: 100, interest: 'music' },
     });
-    expect(screen.getByText('Music 1')).toBeInTheDocument();
-    expect(
-      screen.queryByText('tech', { selector: '[data-slot="card-title"]' }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Tech 1' })).not.toBeInTheDocument();
   });
 
-  it('pages the group members', async () => {
+  it('paginates the users below the table at full width', async () => {
     render(<GroupsSection />);
-    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
+    await screen.findByRole('columnheader', { name: 'Name' });
+    expect(screen.getByText(/Page 1 of 2 · 12 total/)).toBeInTheDocument();
+    expect(document.querySelector('[data-slot="pagination-content"]')).toHaveClass(
+      'w-full',
+      'justify-between',
+    );
 
     await userEvent.click(screen.getByRole('link', { name: 'Go to page 2' }));
 
-    expect(await screen.findByText('Tech 11')).toBeInTheDocument();
-    expect(screen.queryByText('Tech 1')).not.toBeInTheDocument();
-    expect(screen.queryByText('Page 1 of 2 · 12 total')).not.toBeInTheDocument();
+    expect(await screen.findByRole('cell', { name: 'Tech 11' })).toBeInTheDocument();
+    expect(screen.queryByRole('cell', { name: 'Tech 1' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Page 2 of 2 · 12 total/)).toBeInTheDocument();
   });
 
-  it('sizes group cards to their content without extra space', async () => {
-    const { container } = render(<GroupsSection />);
-    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
+  it('renders a shadcn table with name and email columns', async () => {
+    render(<GroupsSection />);
+    await screen.findByRole('table');
 
-    const grid = container.querySelector('.grid.items-start');
-    expect(grid).toBeInTheDocument();
-    expect(grid.querySelector('[data-slot="card"]').className).not.toMatch(/min-h/);
+    expect(screen.getByRole('columnheader', { name: 'Name' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Email' })).toBeInTheDocument();
+    expect(screen.getAllByRole('row')).toHaveLength(11);
   });
 });

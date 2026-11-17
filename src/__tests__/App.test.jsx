@@ -59,7 +59,7 @@ describe('App shell and routing', () => {
       'Notes',
       'Posts',
       'Users',
-      'Interests',
+      'Users by interest',
     ]);
   });
 
