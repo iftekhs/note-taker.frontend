@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { api, errorMessage, setToken } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -82,17 +83,17 @@ export default function AuthPage({ mode }) {
         <CardContent className="space-y-5">
           <Tabs value={mode} onValueChange={switchMode}>
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Log in</TabsTrigger>
-              <TabsTrigger value="register">Register</TabsTrigger>
+              <TabsTrigger value="login" disabled={busy}>Log in</TabsTrigger>
+              <TabsTrigger value="register" disabled={busy}>Register</TabsTrigger>
             </TabsList>
           </Tabs>
 
-          <form onSubmit={submit} className="space-y-4">
+          <form onSubmit={submit} aria-busy={busy} className="space-y-4">
             {mode === 'register' && (
               <>
                 <div className="space-y-2">
                   <Label htmlFor="name">Name</Label>
-                  <Input id="name" value={form.name} onChange={update('name')} required />
+                  <Input id="name" value={form.name} onChange={update('name')} disabled={busy} required />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="interests">Interests (comma separated)</Label>
@@ -101,6 +102,7 @@ export default function AuthPage({ mode }) {
                     value={form.interests}
                     onChange={update('interests')}
                     placeholder="tech, music, travel"
+                    disabled={busy}
                   />
                 </div>
               </>
@@ -108,7 +110,7 @@ export default function AuthPage({ mode }) {
 
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" value={form.email} onChange={update('email')} required />
+              <Input id="email" type="email" value={form.email} onChange={update('email')} disabled={busy} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
@@ -117,6 +119,7 @@ export default function AuthPage({ mode }) {
                 type="password"
                 value={form.password}
                 onChange={update('password')}
+                disabled={busy}
                 minLength={8}
                 maxLength={72}
                 required
@@ -125,7 +128,8 @@ export default function AuthPage({ mode }) {
 
             <FormError message={error} />
 
-            <Button type="submit" className="w-full" disabled={busy}>
+            <Button type="submit" className="w-full" disabled={busy} aria-busy={busy}>
+              {busy && <LoaderCircle className="size-4 animate-spin" />}
               {busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Create account'}
             </Button>
           </form>
@@ -139,6 +143,7 @@ export default function AuthPage({ mode }) {
                   variant="outline"
                   size="sm"
                   onClick={() => fillCredentials(DEMO_CREDENTIALS.admin)}
+                  disabled={busy}
                 >
                   Admin login
                 </Button>
@@ -147,6 +152,7 @@ export default function AuthPage({ mode }) {
                   variant="outline"
                   size="sm"
                   onClick={() => fillCredentials(DEMO_CREDENTIALS.user)}
+                  disabled={busy}
                 >
                   User login
                 </Button>

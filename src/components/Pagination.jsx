@@ -8,7 +8,6 @@ import {
   PaginationPrevious,
 } from '@/components/ui/pagination';
 
-/** First, last, and the pages around the current one, with ellipses for gaps. */
 function pageItems(page, lastPage) {
   const pages = [];
   for (const value of [1, page - 1, page, page + 1, lastPage]) {

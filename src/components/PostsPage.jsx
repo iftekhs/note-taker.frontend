@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import FormError from './FormError.jsx';
 import Pagination from './Pagination.jsx';
@@ -38,15 +39,16 @@ export default function PostsPage({ user }) {
   const [creating, setCreating] = useState(false);
 
   const [myPage, setMyPage] = useState(1);
-  const [refresh, setRefresh] = useState(0);
   const [myResult, setMyResult] = useState(null);
   const [myError, setMyError] = useState('');
+  const [myLoading, setMyLoading] = useState(false);
+  const mineRequest = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = page) => {
     setLoading(true);
     setError('');
     try {
-      setResult(await api('/posts', { params: { page, limit: LIMIT } }));
+      setResult(await api('/posts', { params: { page: targetPage, limit: LIMIT } }));
     } catch (err) {
       setError(errorMessage(err));
     } finally {
@@ -58,14 +60,25 @@ export default function PostsPage({ user }) {
     load();
   }, [load]);
 
-  useEffect(() => {
-    if (tab === 'mine') {
-      setMyError('');
-      api(`/users/${user._id}/posts`, { params: { page: myPage, limit: LIMIT } })
-        .then(setMyResult)
-        .catch((err) => setMyError(errorMessage(err)));
+  const loadMine = useCallback(async (targetPage = myPage) => {
+    const requestId = ++mineRequest.current;
+    setMyLoading(true);
+    setMyError('');
+    try {
+      const data = await api(`/users/${user._id}/posts`, {
+        params: { page: targetPage, limit: LIMIT },
+      });
+      if (requestId === mineRequest.current) setMyResult(data);
+    } catch (err) {
+      if (requestId === mineRequest.current) setMyError(errorMessage(err));
+    } finally {
+      if (requestId === mineRequest.current) setMyLoading(false);
     }
-  }, [tab, myPage, refresh, user._id]);
+  }, [myPage, user._id]);
+
+  useEffect(() => {
+    if (tab === 'mine') loadMine();
+  }, [tab, loadMine]);
 
   function updateCreate(field) {
     return (event) => setCreateForm((current) => ({ ...current, [field]: event.target.value }));
@@ -89,10 +102,16 @@ export default function PostsPage({ user }) {
     setCreateError('');
     try {
       await api('/posts', { method: 'POST', body: createForm });
+      if (tab === 'mine') {
+        const targetPage = myPage !== 1 ? 1 : myPage;
+        await loadMine(targetPage);
+        if (targetPage !== myPage) setMyPage(targetPage);
+      } else {
+        const targetPage = page !== 1 ? 1 : page;
+        await load(targetPage);
+        if (targetPage !== page) setPage(targetPage);
+      }
       closeCreate();
-      if (page === 1) await load();
-      else setPage(1);
-      if (tab === 'mine') setRefresh((value) => value + 1);
     } catch (err) {
       setCreateError(errorMessage(err));
     } finally {
@@ -102,10 +121,7 @@ export default function PostsPage({ user }) {
 
   function changeTab(value) {
     setTab(value);
-    if (value === 'mine') {
-      setMyPage(1);
-      setRefresh((current) => current + 1);
-    }
+    if (value === 'mine') setMyPage(1);
   }
 
   return (
@@ -120,7 +136,7 @@ export default function PostsPage({ user }) {
           <TabsTrigger value="all">All posts</TabsTrigger>
           <TabsTrigger value="mine">My posts</TabsTrigger>
         </TabsList>
-        <TabsContent value="all" className="mt-6 space-y-4">
+        <TabsContent value="all" className="mt-6 space-y-4" aria-busy={loading}>
           <FormError message={error} />
           {loading && <p className="text-sm text-muted-foreground">Loading posts…</p>}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -143,8 +159,9 @@ export default function PostsPage({ user }) {
           )}
           <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
         </TabsContent>
-        <TabsContent value="mine" className="mt-6 space-y-4">
+        <TabsContent value="mine" className="mt-6 space-y-4" aria-busy={myLoading}>
           <FormError message={myError} />
+          {myLoading && <p className="text-sm text-muted-foreground">Loading your posts…</p>}
           {myResult && (
             <>
               <p className="text-sm text-muted-foreground">
@@ -172,13 +189,13 @@ export default function PostsPage({ user }) {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) closeCreate(); }}>
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) closeCreate(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create post</DialogTitle>
             <DialogDescription>Publish a post that every authenticated user can read.</DialogDescription>
           </DialogHeader>
-          <form id="create-post-form" onSubmit={createPost} className="space-y-4">
+          <form id="create-post-form" onSubmit={createPost} aria-busy={creating} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="create-post-title">Title</Label>
               <Input
@@ -186,6 +203,7 @@ export default function PostsPage({ user }) {
                 value={createForm.title}
                 onChange={updateCreate('title')}
                 maxLength={200}
+                disabled={creating}
                 required
               />
             </div>
@@ -196,14 +214,16 @@ export default function PostsPage({ user }) {
                 value={createForm.content}
                 onChange={updateCreate('content')}
                 rows={4}
+                disabled={creating}
                 required
               />
             </div>
           </form>
           <FormError message={createError} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeCreate}>Cancel</Button>
-            <Button type="submit" form="create-post-form" disabled={creating}>
+            <Button type="button" variant="outline" onClick={closeCreate} disabled={creating}>Cancel</Button>
+            <Button type="submit" form="create-post-form" disabled={creating} aria-busy={creating}>
+              {creating && <LoaderCircle className="size-4 animate-spin" />}
               {creating ? 'Publishing…' : 'Publish post'}
             </Button>
           </DialogFooter>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api.js';
@@ -102,6 +102,55 @@ describe('NotesPage', () => {
 
     await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(api).toHaveBeenCalledWith('/notes/n1', { method: 'DELETE' }));
+  });
+
+  it('keeps the confirmation open with a loading button until the note is deleted', async () => {
+    const original = api.getMockImplementation();
+    let finishDelete;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/notes/n1' && options.method === 'DELETE') {
+        return new Promise((resolve) => {
+          finishDelete = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<NotesPage user={user} />);
+    await screen.findByText('First note');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const alert = await screen.findByRole('alertdialog');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
+
+    expect(await within(alert).findByRole('button', { name: /Deleting/ })).toBeDisabled();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+
+    await act(async () => {
+      finishDelete({});
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+  });
+
+  it('shows a delete failure inside the confirmation dialog and keeps it open', async () => {
+    const original = api.getMockImplementation();
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/notes/n1' && options.method === 'DELETE') {
+        return Promise.reject(new Error('Delete blocked'));
+      }
+      return original(path, options);
+    });
+
+    render(<NotesPage user={user} />);
+    await screen.findByText('First note');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    const alert = await screen.findByRole('alertdialog');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
+
+    expect(await within(alert).findByRole('alert')).toHaveTextContent('Delete blocked');
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: 'Delete' })).toBeEnabled();
   });
 
   it('loads another page when pagination is used', async () => {

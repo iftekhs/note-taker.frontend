@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import FormError from './FormError.jsx';
@@ -43,9 +44,9 @@ function Field({ id, label, children, className }) {
   );
 }
 
-function RoleSelect({ id, value, onValueChange }) {
+function RoleSelect({ id, value, onValueChange, disabled }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger id={id} className="w-full">
         <SelectValue />
       </SelectTrigger>
@@ -57,9 +58,9 @@ function RoleSelect({ id, value, onValueChange }) {
   );
 }
 
-function InterestSelect({ id, value, interests, onValueChange }) {
+function InterestSelect({ id, value, interests, onValueChange, disabled }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
+    <Select value={value} onValueChange={onValueChange} disabled={disabled}>
       <SelectTrigger id={id} className="min-w-48">
         <SelectValue />
       </SelectTrigger>
@@ -111,13 +112,17 @@ export function UsersSection() {
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
   const [editError, setEditError] = useState('');
+  const [listLoading, setListLoading] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = page) => {
+    setListLoading(true);
     setError('');
     try {
-      setResult(await api('/users', { params: { page, limit: LIMIT } }));
+      setResult(await api('/users', { params: { page: targetPage, limit: LIMIT } }));
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setListLoading(false);
     }
   }, [page]);
 
@@ -171,9 +176,10 @@ export function UsersSection() {
           interests: splitInterests(createForm.interests),
         },
       });
+      const targetPage = page !== 1 ? 1 : page;
+      await load(targetPage);
+      if (targetPage !== page) setPage(targetPage);
       closeCreate();
-      if (page !== 1) setPage(1);
-      else await load();
     } catch (err) {
       setCreateError(errorMessage(err));
     } finally {
@@ -194,8 +200,8 @@ export function UsersSection() {
       };
       if (editing.password) body.password = editing.password;
       await api(`/users/${editing.id}`, { method: 'PUT', body });
+      await load(page);
       closeEdit();
-      await load();
     } catch (err) {
       setEditError(errorMessage(err));
     } finally {
@@ -204,14 +210,11 @@ export function UsersSection() {
   }
 
   async function remove(user) {
-    setError('');
-    try {
-      await api(`/users/${user._id}`, { method: 'DELETE' });
-      if (result.data.length === 1 && page > 1) setPage(page - 1);
-      else await load();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
+    await api(`/users/${user._id}`, { method: 'DELETE' });
+    const targetPage = result.data.length === 1 && page > 1 ? page - 1 : page;
+    await load(targetPage);
+    if (targetPage !== page) setPage(targetPage);
+    return true;
   }
 
   function editField(field) {
@@ -224,18 +227,19 @@ export function UsersSection() {
         <Button type="button" onClick={openCreate}>New user</Button>
       </div>
 
-      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) closeCreate(); }}>
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) closeCreate(); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Create user</DialogTitle>
             <DialogDescription>Admins can create accounts with any role.</DialogDescription>
           </DialogHeader>
-          <form id="create-user-form" onSubmit={create} className="grid gap-4 sm:grid-cols-2">
+          <form id="create-user-form" onSubmit={create} aria-busy={creating} className="grid gap-4 sm:grid-cols-2">
             <Field id="new-name" label="Name">
               <Input
                 id="new-name"
                 value={createForm.name}
                 onChange={(event) => setCreateForm({ ...createForm, name: event.target.value })}
+                disabled={creating}
                 required
               />
             </Field>
@@ -245,6 +249,7 @@ export function UsersSection() {
                 type="email"
                 value={createForm.email}
                 onChange={(event) => setCreateForm({ ...createForm, email: event.target.value })}
+                disabled={creating}
                 required
               />
             </Field>
@@ -254,6 +259,7 @@ export function UsersSection() {
                 type="password"
                 value={createForm.password}
                 onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })}
+                disabled={creating}
                 minLength={8}
                 maxLength={72}
                 required
@@ -264,6 +270,7 @@ export function UsersSection() {
                 id="new-role"
                 value={createForm.role}
                 onValueChange={(value) => setCreateForm({ ...createForm, role: value })}
+                disabled={creating}
               />
             </Field>
             <Field id="new-interests" label="Interests" className="sm:col-span-2">
@@ -272,32 +279,35 @@ export function UsersSection() {
                 value={createForm.interests}
                 onChange={(event) => setCreateForm({ ...createForm, interests: event.target.value })}
                 placeholder="tech, music"
+                disabled={creating}
               />
             </Field>
           </form>
           <FormError message={createError} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeCreate}>Cancel</Button>
-            <Button type="submit" form="create-user-form" disabled={creating}>
+            <Button type="button" variant="outline" onClick={closeCreate} disabled={creating}>Cancel</Button>
+            <Button type="submit" form="create-user-form" disabled={creating} aria-busy={creating}>
+              {creating && <LoaderCircle className="size-4 animate-spin" />}
               {creating ? 'Creating…' : 'Create user'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open) closeEdit(); }}>
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open && !busy) closeEdit(); }}>
         {editing && (
           <DialogContent className="sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Edit user</DialogTitle>
               <DialogDescription>Update account details and role for {editing.email}.</DialogDescription>
             </DialogHeader>
-            <form id="edit-user-form" onSubmit={saveEdit} className="grid gap-4 sm:grid-cols-2">
+            <form id="edit-user-form" onSubmit={saveEdit} aria-busy={busy} className="grid gap-4 sm:grid-cols-2">
               <Field id="edit-name" label="Name">
                 <Input
                   id="edit-name"
                   value={editing.name}
                   onChange={editField('name')}
+                  disabled={busy}
                   required
                 />
               </Field>
@@ -307,6 +317,7 @@ export function UsersSection() {
                   type="email"
                   value={editing.email}
                   onChange={editField('email')}
+                  disabled={busy}
                   required
                 />
               </Field>
@@ -315,6 +326,7 @@ export function UsersSection() {
                   id="edit-role"
                   value={editing.role}
                   onValueChange={(value) => setEditing((current) => ({ ...current, role: value }))}
+                  disabled={busy}
                 />
               </Field>
               <Field id="edit-interests" label="Interests">
@@ -322,6 +334,7 @@ export function UsersSection() {
                   id="edit-interests"
                   value={editing.interests}
                   onChange={editField('interests')}
+                  disabled={busy}
                 />
               </Field>
               <Field id="edit-password" label="New password (optional)" className="sm:col-span-2">
@@ -330,6 +343,7 @@ export function UsersSection() {
                   type="password"
                   value={editing.password}
                   onChange={editField('password')}
+                  disabled={busy}
                   minLength={8}
                   maxLength={72}
                 />
@@ -337,8 +351,9 @@ export function UsersSection() {
             </form>
             <FormError message={editError} />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={closeEdit}>Cancel</Button>
-              <Button type="submit" form="edit-user-form" disabled={busy}>
+              <Button type="button" variant="outline" onClick={closeEdit} disabled={busy}>Cancel</Button>
+              <Button type="submit" form="edit-user-form" disabled={busy} aria-busy={busy}>
+                {busy && <LoaderCircle className="size-4 animate-spin" />}
                 {busy ? 'Saving…' : 'Save changes'}
               </Button>
             </DialogFooter>
@@ -347,6 +362,7 @@ export function UsersSection() {
       </Dialog>
 
       <FormError message={error} />
+      {listLoading && <p className="text-sm text-muted-foreground">Loading users…</p>}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {result.data.map((user) => (
@@ -374,6 +390,10 @@ export function UsersSection() {
         ))}
       </div>
 
+      {!listLoading && result.data.length === 0 && (
+        <p className="text-sm text-muted-foreground">No users found.</p>
+      )}
+
       <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
     </div>
   );
@@ -383,29 +403,30 @@ export function NotesSection() {
   const [page, setPage] = useState(1);
   const [result, setResult] = useState({ data: [], total: 0, totalPages: 0 });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const [ownerNames, setOwnerNames] = useState({});
 
-  // The notes API returns owner IDs only; load the user directory once to show names.
   useEffect(() => {
     let active = true;
     api('/users', { params: { page: 1, limit: 100 } })
       .then((data) => {
         if (active) setOwnerNames(Object.fromEntries(data.data.map((user) => [user._id, user.name])));
       })
-      .catch(() => {
-        // Fall back to the short owner id if the directory cannot be loaded.
-      });
+      .catch(() => {});
     return () => {
       active = false;
     };
   }, []);
 
   const load = useCallback(async () => {
+    setLoading(true);
     setError('');
     try {
       setResult(await api('/notes', { params: { page, limit: NOTES_LIMIT } }));
     } catch (err) {
       setError(errorMessage(err));
+    } finally {
+      setLoading(false);
     }
   }, [page]);
 
@@ -416,6 +437,7 @@ export function NotesSection() {
   return (
     <div className="space-y-6">
       <FormError message={error} />
+      {loading && <p className="text-sm text-muted-foreground">Loading notes…</p>}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {result.data.map((note) => (
@@ -433,7 +455,9 @@ export function NotesSection() {
         ))}
       </div>
 
-      {result.data.length === 0 && <p className="text-sm text-muted-foreground">No notes found.</p>}
+      {!loading && result.data.length === 0 && (
+        <p className="text-sm text-muted-foreground">No notes found.</p>
+      )}
 
       <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
     </div>
@@ -454,8 +478,6 @@ export function GroupsSection() {
     let active = true;
     const loadInterests = async () => {
       try {
-        // The user list is already paginated and capped at 100 users, so one
-        // request is enough to discover every interest currently in use.
         const users = await api('/users', { params: { page: 1, limit: 100 } });
         const values = [
           ...new Set((users.data ?? []).flatMap((user) => user.interests ?? [])),
@@ -480,8 +502,6 @@ export function GroupsSection() {
     setLoading(true);
     setError('');
     try {
-      // A single indexed interest filter returns one group. Request all its
-      // members (max 100 users exist) so the table can page them locally.
       setResult(
         await api('/users/grouped-by-interests', {
           params: { page: 1, limit: 100, interest },
@@ -515,10 +535,14 @@ export function GroupsSection() {
           value={interest}
           interests={interests}
           onValueChange={setInterest}
+          disabled={!interestsReady || loading}
         />
       </div>
 
       <FormError message={error} />
+      {!interestsReady && !error && (
+        <p className="text-sm text-muted-foreground">Loading interests…</p>
+      )}
       {loading && <p className="text-sm text-muted-foreground">Loading users…</p>}
 
       {result.data[0] ? (

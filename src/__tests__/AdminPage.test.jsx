@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api.js';
@@ -9,8 +9,6 @@ vi.mock('../api.js', async (importOriginal) => ({
   api: vi.fn(),
 }));
 
-// Radix Select relies on browser layout APIs that jsdom cannot provide, so the
-// admin suite uses a native select stub to exercise the same change handlers.
 vi.mock('../components/ui/select.jsx', async () => {
   const { createContext, useCallback, useContext, useEffect, useState } = await import('react');
   const SelectContext = createContext(null);
@@ -168,6 +166,58 @@ describe('UsersSection', () => {
     );
   });
 
+  it('shows a loading indicator while the user list loads', async () => {
+    const original = api.getMockImplementation();
+    let finishList;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/users' && !options.method && options.params?.limit === 10) {
+        return new Promise((resolve) => {
+          finishList = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<UsersSection />);
+    expect(await screen.findByText('Loading users…')).toBeInTheDocument();
+
+    await act(async () => {
+      finishList({ data: users, total: users.length, totalPages: 1 });
+    });
+    expect(await screen.findByText('Alice')).toBeInTheDocument();
+  });
+
+  it('keeps the create dialog open with a loading button until the user is created', async () => {
+    const original = api.getMockImplementation();
+    let finishCreate;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/users' && options.method === 'POST') {
+        return new Promise((resolve) => {
+          finishCreate = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<UsersSection />);
+    await screen.findByText('Alice');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New user' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Name'), 'Carol');
+    await userEvent.type(within(dialog).getByLabelText('Email'), 'carol@example.com');
+    await userEvent.type(within(dialog).getByLabelText('Password'), 'Password123');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Create user' }));
+
+    expect(await within(dialog).findByRole('button', { name: /Creating/ })).toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await act(async () => {
+      finishCreate({ data: {} });
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
   it('edits a user role, name, and interests in a dialog', async () => {
     render(<UsersSection />);
     await screen.findByText('Alice');
@@ -247,6 +297,35 @@ describe('UsersSection', () => {
     expect(within(alert).getByText(/notes and posts will also be deleted/i)).toBeInTheDocument();
     await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(api).toHaveBeenCalledWith('/users/u1', { method: 'DELETE' }));
+  });
+
+  it('keeps the confirmation open with a loading button until the user is deleted', async () => {
+    const original = api.getMockImplementation();
+    let finishDelete;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/users/u1' && options.method === 'DELETE') {
+        return new Promise((resolve) => {
+          finishDelete = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<UsersSection />);
+    await screen.findByText('Alice');
+
+    const card = screen.getByText('Alice').closest('[data-slot="card"]');
+    await userEvent.click(within(card).getByRole('button', { name: 'Delete' }));
+    const alert = await screen.findByRole('alertdialog');
+    await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
+
+    expect(await within(alert).findByRole('button', { name: /Deleting/ })).toBeDisabled();
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+
+    await act(async () => {
+      finishDelete({});
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
   });
 });
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { LoaderCircle } from 'lucide-react';
 import { api, errorMessage } from '../api.js';
 import ConfirmDialog from './ConfirmDialog.jsx';
 import FormError from './FormError.jsx';
@@ -37,12 +38,11 @@ export default function NotesPage({ user }) {
   const [editError, setEditError] = useState('');
   const [updating, setUpdating] = useState(false);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (targetPage = page) => {
     setLoading(true);
     setError('');
     try {
-      const params = { page, limit: LIMIT };
-      // Admins can see all notes; keep this tab to the admin's own notes.
+      const params = { page: targetPage, limit: LIMIT };
       if (user.role === 'admin') params.owner = user._id;
       setResult(await api('/notes', { params }));
     } catch (err) {
@@ -96,9 +96,10 @@ export default function NotesPage({ user }) {
     setCreateError('');
     try {
       await api('/notes', { method: 'POST', body: createForm });
+      const targetPage = page !== 1 ? 1 : page;
+      await load(targetPage);
+      if (targetPage !== page) setPage(targetPage);
       closeCreate();
-      if (page !== 1) setPage(1);
-      else await load();
     } catch (err) {
       setCreateError(errorMessage(err));
     } finally {
@@ -113,8 +114,8 @@ export default function NotesPage({ user }) {
     setEditError('');
     try {
       await api(`/notes/${editingNote._id}`, { method: 'PUT', body: editForm });
+      await load(page);
       closeEdit();
-      await load();
     } catch (err) {
       setEditError(errorMessage(err));
     } finally {
@@ -123,14 +124,11 @@ export default function NotesPage({ user }) {
   }
 
   async function remove(note) {
-    setError('');
-    try {
-      await api(`/notes/${note._id}`, { method: 'DELETE' });
-      if (result.data.length === 1 && page > 1) setPage(page - 1);
-      else await load();
-    } catch (err) {
-      setError(errorMessage(err));
-    }
+    await api(`/notes/${note._id}`, { method: 'DELETE' });
+    const targetPage = result.data.length === 1 && page > 1 ? page - 1 : page;
+    await load(targetPage);
+    if (targetPage !== page) setPage(targetPage);
+    return true;
   }
 
   return (
@@ -174,13 +172,13 @@ export default function NotesPage({ user }) {
 
       <Pagination page={page} totalPages={result.totalPages} total={result.total} onPage={setPage} />
 
-      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) closeCreate(); }}>
+      <Dialog open={createOpen} onOpenChange={(open) => { if (!open && !creating) closeCreate(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Create note</DialogTitle>
             <DialogDescription>Write a new note and it will appear in the list below.</DialogDescription>
           </DialogHeader>
-          <form id="create-note-form" onSubmit={createNote} className="space-y-4">
+          <form id="create-note-form" onSubmit={createNote} aria-busy={creating} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="create-note-title">Title</Label>
               <Input
@@ -188,6 +186,7 @@ export default function NotesPage({ user }) {
                 value={createForm.title}
                 onChange={updateCreate('title')}
                 maxLength={200}
+                disabled={creating}
                 required
               />
             </div>
@@ -198,27 +197,29 @@ export default function NotesPage({ user }) {
                 value={createForm.content}
                 onChange={updateCreate('content')}
                 rows={4}
+                disabled={creating}
                 required
               />
             </div>
           </form>
           <FormError message={createError} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeCreate}>Cancel</Button>
-            <Button type="submit" form="create-note-form" disabled={creating}>
+            <Button type="button" variant="outline" onClick={closeCreate} disabled={creating}>Cancel</Button>
+            <Button type="submit" form="create-note-form" disabled={creating} aria-busy={creating}>
+              {creating && <LoaderCircle className="size-4 animate-spin" />}
               {creating ? 'Saving…' : 'Create note'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={editOpen} onOpenChange={(open) => { if (!open) closeEdit(); }}>
+      <Dialog open={editOpen} onOpenChange={(open) => { if (!open && !updating) closeEdit(); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Edit note</DialogTitle>
             <DialogDescription>Update the title and content, then save your changes.</DialogDescription>
           </DialogHeader>
-          <form id="edit-note-form" onSubmit={saveEdit} className="space-y-4">
+          <form id="edit-note-form" onSubmit={saveEdit} aria-busy={updating} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="edit-note-title">Title</Label>
               <Input
@@ -226,6 +227,7 @@ export default function NotesPage({ user }) {
                 value={editForm.title}
                 onChange={updateEdit('title')}
                 maxLength={200}
+                disabled={updating}
                 required
               />
             </div>
@@ -236,14 +238,16 @@ export default function NotesPage({ user }) {
                 value={editForm.content}
                 onChange={updateEdit('content')}
                 rows={4}
+                disabled={updating}
                 required
               />
             </div>
           </form>
           <FormError message={editError} />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={closeEdit}>Cancel</Button>
-            <Button type="submit" form="edit-note-form" disabled={updating}>
+            <Button type="button" variant="outline" onClick={closeEdit} disabled={updating}>Cancel</Button>
+            <Button type="submit" form="edit-note-form" disabled={updating} aria-busy={updating}>
+              {updating && <LoaderCircle className="size-4 animate-spin" />}
               {updating ? 'Saving…' : 'Save changes'}
             </Button>
           </DialogFooter>

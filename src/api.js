@@ -25,7 +25,6 @@ export function errorMessage(error) {
   return error.message || 'Request failed';
 }
 
-/** Small fetch wrapper: JSON, Bearer token, and one error shape for every call. */
 export async function api(path, { method = 'GET', body, params } = {}) {
   const query = params
     ? new URLSearchParams(

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '../api.js';
@@ -78,6 +78,59 @@ describe('PostsPage', () => {
       }),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('keeps the create dialog open with a loading button until publishing finishes', async () => {
+    const original = api.getMockImplementation();
+    let finishPost;
+    api.mockImplementation((path, options = {}) => {
+      if (path === '/posts' && options.method === 'POST') {
+        return new Promise((resolve) => {
+          finishPost = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<PostsPage user={user} />);
+    await screen.findByText('Public post');
+
+    await userEvent.click(screen.getByRole('button', { name: 'New post' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Title'), 'Fresh post');
+    await userEvent.type(within(dialog).getByLabelText('Content'), 'Fresh content');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Publish post' }));
+
+    expect(await within(dialog).findByRole('button', { name: /Publishing/ })).toBeDisabled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    await act(async () => {
+      finishPost({ data: post('p2', 'Fresh post') });
+    });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('shows a loading indicator while My posts loads', async () => {
+    const original = api.getMockImplementation();
+    let finishMine;
+    api.mockImplementation((path, options = {}) => {
+      if (path === `/users/${user._id}/posts`) {
+        return new Promise((resolve) => {
+          finishMine = resolve;
+        });
+      }
+      return original(path, options);
+    });
+
+    render(<PostsPage user={user} />);
+    await screen.findByText('Public post');
+    await userEvent.click(screen.getByRole('tab', { name: 'My posts' }));
+
+    expect(await screen.findByText('Loading your posts…')).toBeInTheDocument();
+    await act(async () => {
+      finishMine({ user: { name: user.name }, data: [], total: 0, totalPages: 1 });
+    });
+    await waitFor(() => expect(screen.queryByText('Loading your posts…')).not.toBeInTheDocument());
   });
 
   it('paginates the all-posts list', async () => {
