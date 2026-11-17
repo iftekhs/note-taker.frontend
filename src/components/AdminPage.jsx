@@ -416,6 +416,9 @@ export function NotesSection() {
 }
 
 export function GroupsSection() {
+  const DEFAULT_INTEREST = 'tech';
+  const [interest, setInterest] = useState(DEFAULT_INTEREST);
+  const [activeInterest, setActiveInterest] = useState(DEFAULT_INTEREST);
   const [result, setResult] = useState({ data: [] });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -426,20 +429,30 @@ export function GroupsSection() {
     setLoading(true);
     setError('');
     try {
-      // The endpoint paginates groups, not their members. Request all groups
-      // (max 100 users exist) so each card can page its own members locally.
-      setResult(await api('/users/grouped-by-interests', { params: { page: 1, limit: 100 } }));
+      // A single indexed interest filter returns one group. Request all its
+      // members (max 100 users exist) so the card can page them locally.
+      setResult(
+        await api('/users/grouped-by-interests', {
+          params: { page: 1, limit: 100, interest: activeInterest },
+        }),
+      );
       setGroupPages({});
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [activeInterest]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  function applyFilter(event) {
+    event.preventDefault();
+    const value = interest.trim().toLowerCase();
+    if (value) setActiveInterest(value);
+  }
 
   function setGroupPage(groupId, page) {
     setGroupPages((current) => ({ ...current, [groupId]: page }));
@@ -447,6 +460,20 @@ export function GroupsSection() {
 
   return (
     <div className="space-y-6">
+      <form onSubmit={applyFilter} className="flex flex-wrap items-end gap-3">
+        <Field id="interest-filter" label="Interest">
+          <Input
+            id="interest-filter"
+            value={interest}
+            onChange={(event) => setInterest(event.target.value)}
+            placeholder="tech"
+            required
+          />
+        </Field>
+        <Button type="submit" disabled={loading}>Apply</Button>
+        <Badge variant="secondary" className="mb-0.5">Showing: {activeInterest}</Badge>
+      </form>
+
       <FormError message={error} />
       {loading && <p className="text-sm text-muted-foreground">Loading groups…</p>}
 

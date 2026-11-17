@@ -89,7 +89,9 @@ function adminApiImplementation({ userList = users, noteList = notes, groupList 
       return { data: noteList, total: noteList.length, totalPages: 1 };
     }
     if (path === '/users/grouped-by-interests') {
-      return { data: groupList, total: groupList.length, totalPages: 1 };
+      const interest = options.params?.interest;
+      const data = interest ? groupList.filter((group) => group._id === interest) : groupList;
+      return { data, total: data.length, totalPages: 1 };
     }
     throw new Error(`Unexpected API call: ${options.method || 'GET'} ${path}`);
   };
@@ -239,23 +241,40 @@ describe('NotesSection', () => {
 });
 
 describe('GroupsSection', () => {
-  it('requests all groups without a filter and shows at most 10 members each', async () => {
+  it('requests a single indexed interest and shows at most 10 members', async () => {
     render(<GroupsSection />);
     expect(await screen.findByText('tech')).toBeInTheDocument();
 
     expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
-      params: { page: 1, limit: 100 },
+      params: { page: 1, limit: 100, interest: 'tech' },
     });
-    expect(screen.queryByPlaceholderText(/filter/i)).not.toBeInTheDocument();
+    expect(api.mock.calls.every((call) => call[1]?.params?.interest)).toBe(true);
+    expect(screen.getByLabelText('Interest')).toHaveValue('tech');
     expect(screen.queryByText(/Page 1 of 2/)).not.toBeInTheDocument();
 
     expect(screen.getByText('Tech 1')).toBeInTheDocument();
     expect(screen.getByText('Tech 10')).toBeInTheDocument();
     expect(screen.queryByText('Tech 11')).not.toBeInTheDocument();
-    expect(screen.getByText('Music 1')).toBeInTheDocument();
+    expect(screen.queryByText('music')).not.toBeInTheDocument();
   });
 
-  it('pages each group independently', async () => {
+  it('applies a different interest filter', async () => {
+    render(<GroupsSection />);
+    await screen.findByText('tech');
+
+    await userEvent.clear(screen.getByLabelText('Interest'));
+    await userEvent.type(screen.getByLabelText('Interest'), 'music');
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
+
+    expect(await screen.findByText('music')).toBeInTheDocument();
+    expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
+      params: { page: 1, limit: 100, interest: 'music' },
+    });
+    expect(screen.getByText('Music 1')).toBeInTheDocument();
+    expect(screen.queryByText('Tech 1')).not.toBeInTheDocument();
+  });
+
+  it('pages the group members', async () => {
     render(<GroupsSection />);
     await screen.findByText('tech');
 
@@ -263,7 +282,6 @@ describe('GroupsSection', () => {
 
     expect(await screen.findByText('Tech 11')).toBeInTheDocument();
     expect(screen.queryByText('Tech 1')).not.toBeInTheDocument();
-    expect(screen.getByText('Music 1')).toBeInTheDocument();
     expect(screen.queryByText('Page 1 of 2 · 12 total')).not.toBeInTheDocument();
   });
 

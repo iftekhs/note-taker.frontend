@@ -50,7 +50,7 @@ function ProtectedLayout() {
           {user.role === 'admin' && (
             <>
               <NavLink to="/admin/users" className={navClass}>Users</NavLink>
-              <NavLink to="/admin/interests" className={navClass}>Grouped by interests</NavLink>
+              <NavLink to="/admin/interests" className={navClass}>Interests</NavLink>
             </>
           )}
         </nav>
@@ -133,7 +133,7 @@ export default function App() {
           path="/admin/interests"
           element={
             <RequireAdmin>
-              <AdminView title="Grouped by interests"><GroupsSection /></AdminView>
+              <AdminView title="Interests"><GroupsSection /></AdminView>
             </RequireAdmin>
           }
         />
