@@ -12,13 +12,26 @@ vi.mock('../api.js', async (importOriginal) => ({
 // Radix Select relies on browser layout APIs that jsdom cannot provide, so the
 // admin suite uses a native select stub to exercise the same change handlers.
 vi.mock('../components/ui/select.jsx', async () => {
-  const { createContext, useContext } = await import('react');
+  const { createContext, useCallback, useContext, useEffect, useState } = await import('react');
   const SelectContext = createContext(null);
 
   return {
-    Select: ({ value, onValueChange, children }) => (
-      <SelectContext.Provider value={{ value, onValueChange }}>{children}</SelectContext.Provider>
-    ),
+    Select: ({ value, onValueChange, children }) => {
+      const [items, setItems] = useState([]);
+      const register = useCallback(
+        (item) => setItems((current) => (current.includes(item) ? current : [...current, item])),
+        [],
+      );
+      const unregister = useCallback(
+        (item) => setItems((current) => current.filter((value) => value !== item)),
+        [],
+      );
+      return (
+        <SelectContext.Provider value={{ value, onValueChange, items, register, unregister }}>
+          {children}
+        </SelectContext.Provider>
+      );
+    },
     SelectTrigger: ({ id, className }) => {
       const context = useContext(SelectContext);
       return (
@@ -28,13 +41,23 @@ vi.mock('../components/ui/select.jsx', async () => {
           value={context.value}
           onChange={(event) => context.onValueChange(event.target.value)}
         >
-          <option value="user">user</option>
-          <option value="admin">admin</option>
+          {context.items.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
         </select>
       );
     },
     SelectContent: ({ children }) => <>{children}</>,
-    SelectItem: ({ value, children }) => <option value={value}>{children}</option>,
+    SelectItem: ({ value }) => {
+      const context = useContext(SelectContext);
+      useEffect(() => {
+        context.register(value);
+        return () => context.unregister(value);
+      }, [value, context.register, context.unregister]);
+      return null;
+    },
     SelectValue: () => null,
   };
 });
@@ -241,42 +264,56 @@ describe('NotesSection', () => {
 });
 
 describe('GroupsSection', () => {
-  it('requests a single indexed interest and shows at most 10 members', async () => {
+  it('lists every existing interest in the select and requests one indexed group', async () => {
     render(<GroupsSection />);
-    expect(await screen.findByText('tech')).toBeInTheDocument();
+    expect(
+      await screen.findByText('tech', { selector: '[data-slot="card-title"]' }),
+    ).toBeInTheDocument();
 
+    expect(api).toHaveBeenCalledWith('/users', { params: { page: 1, limit: 100 } });
     expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
       params: { page: 1, limit: 100, interest: 'tech' },
     });
-    expect(api.mock.calls.every((call) => call[1]?.params?.interest)).toBe(true);
-    expect(screen.getByLabelText('Interest')).toHaveValue('tech');
-    expect(screen.queryByText(/Page 1 of 2/)).not.toBeInTheDocument();
+    const groupedCalls = api.mock.calls.filter((call) => call[0] === '/users/grouped-by-interests');
+    expect(groupedCalls.every((call) => call[1]?.params?.interest)).toBe(true);
+
+    const select = screen.getByLabelText('Interest');
+    expect(select).toHaveValue('tech');
+    expect(within(select).getAllByRole('option').map((option) => option.value)).toEqual([
+      'music',
+      'tech',
+    ]);
+    expect(
+      screen.queryByText('music', { selector: '[data-slot="card-title"]' }),
+    ).not.toBeInTheDocument();
 
     expect(screen.getByText('Tech 1')).toBeInTheDocument();
     expect(screen.getByText('Tech 10')).toBeInTheDocument();
     expect(screen.queryByText('Tech 11')).not.toBeInTheDocument();
-    expect(screen.queryByText('music')).not.toBeInTheDocument();
   });
 
-  it('applies a different interest filter', async () => {
+  it('applies a different interest from the select', async () => {
     render(<GroupsSection />);
-    await screen.findByText('tech');
+    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
 
-    await userEvent.clear(screen.getByLabelText('Interest'));
-    await userEvent.type(screen.getByLabelText('Interest'), 'music');
+    await userEvent.selectOptions(screen.getByLabelText('Interest'), 'music');
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
-    expect(await screen.findByText('music')).toBeInTheDocument();
+    expect(
+      await screen.findByText('music', { selector: '[data-slot="card-title"]' }),
+    ).toBeInTheDocument();
     expect(api).toHaveBeenCalledWith('/users/grouped-by-interests', {
       params: { page: 1, limit: 100, interest: 'music' },
     });
     expect(screen.getByText('Music 1')).toBeInTheDocument();
-    expect(screen.queryByText('Tech 1')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('tech', { selector: '[data-slot="card-title"]' }),
+    ).not.toBeInTheDocument();
   });
 
   it('pages the group members', async () => {
     render(<GroupsSection />);
-    await screen.findByText('tech');
+    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
 
     await userEvent.click(screen.getByRole('link', { name: 'Go to page 2' }));
 
@@ -287,7 +324,7 @@ describe('GroupsSection', () => {
 
   it('sizes group cards to their content without extra space', async () => {
     const { container } = render(<GroupsSection />);
-    await screen.findByText('tech');
+    await screen.findByText('tech', { selector: '[data-slot="card-title"]' });
 
     const grid = container.querySelector('.grid.items-start');
     expect(grid).toBeInTheDocument();

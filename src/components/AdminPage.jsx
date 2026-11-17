@@ -56,6 +56,23 @@ function RoleSelect({ id, value, onValueChange }) {
   );
 }
 
+function InterestSelect({ id, value, interests, onValueChange }) {
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {interests.map((interest) => (
+          <SelectItem key={interest} value={interest}>
+            {interest}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
 function InterestBadges({ interests }) {
   if (!interests?.length) return <span className="text-sm text-muted-foreground">No interests</span>;
   return (
@@ -417,6 +434,8 @@ export function NotesSection() {
 
 export function GroupsSection() {
   const DEFAULT_INTEREST = 'tech';
+  const [interests, setInterests] = useState([]);
+  const [interestsReady, setInterestsReady] = useState(false);
   const [interest, setInterest] = useState(DEFAULT_INTEREST);
   const [activeInterest, setActiveInterest] = useState(DEFAULT_INTEREST);
   const [result, setResult] = useState({ data: [] });
@@ -425,7 +444,34 @@ export function GroupsSection() {
   // One page number per interest group, so changing one group never affects another.
   const [groupPages, setGroupPages] = useState({});
 
+  useEffect(() => {
+    let active = true;
+    const loadInterests = async () => {
+      try {
+        // The user list is already paginated and capped at 100 users, so one
+        // request is enough to discover every interest currently in use.
+        const users = await api('/users', { params: { page: 1, limit: 100 } });
+        const values = [
+          ...new Set((users.data ?? []).flatMap((user) => user.interests ?? [])),
+        ].sort();
+        if (!active) return;
+        setInterests(values);
+        const initial = values.includes(DEFAULT_INTEREST) ? DEFAULT_INTEREST : values[0] ?? '';
+        setInterest(initial);
+        setActiveInterest(initial);
+        setInterestsReady(true);
+      } catch (err) {
+        if (active) setError(errorMessage(err));
+      }
+    };
+    loadInterests();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const load = useCallback(async () => {
+    if (!interestsReady || !activeInterest) return;
     setLoading(true);
     setError('');
     try {
@@ -442,7 +488,7 @@ export function GroupsSection() {
     } finally {
       setLoading(false);
     }
-  }, [activeInterest]);
+  }, [activeInterest, interestsReady]);
 
   useEffect(() => {
     load();
@@ -450,8 +496,7 @@ export function GroupsSection() {
 
   function applyFilter(event) {
     event.preventDefault();
-    const value = interest.trim().toLowerCase();
-    if (value) setActiveInterest(value);
+    if (interest) setActiveInterest(interest);
   }
 
   function setGroupPage(groupId, page) {
@@ -462,16 +507,15 @@ export function GroupsSection() {
     <div className="space-y-6">
       <form onSubmit={applyFilter} className="flex flex-wrap items-end gap-3">
         <Field id="interest-filter" label="Interest">
-          <Input
+          <InterestSelect
             id="interest-filter"
             value={interest}
-            onChange={(event) => setInterest(event.target.value)}
-            placeholder="tech"
-            required
+            interests={interests}
+            onValueChange={setInterest}
           />
         </Field>
-        <Button type="submit" disabled={loading}>Apply</Button>
-        <Badge variant="secondary" className="mb-0.5">Showing: {activeInterest}</Badge>
+        <Button type="submit" disabled={loading || !interest}>Apply</Button>
+        <Badge variant="secondary" className="mb-0.5">Showing: {activeInterest || '—'}</Badge>
       </form>
 
       <FormError message={error} />
