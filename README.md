@@ -62,11 +62,11 @@ npm run preview
 - Notes: create and edit in modals (Dialog), delete via confirmation dialog, paginated list
 - Posts: create in a modal, paginated list, and "My posts" via the `$lookup` aggregation
 - Admin pages (admins only):
-  - paginated user list with create in a modal, edit (name/email/role/interests/password), and delete
+  - paginated user list with create and edit (name/email/role/interests/password) in modals, plus delete with a warning that the user's notes and posts will also be removed
   - all notes, paginated, showing owner names (read-only)
   - users grouped by interests, with independent pagination per group (10 users per page)
 - Session-expiry handling: a 401 clears the session and the router redirects to `/login`
-- Tailwind CSS v4 utilities and shadcn/ui components (Card, Button, Input, Label, Textarea, Select, Tabs, Badge, Alert, Separator, Dialog, AlertDialog, Pagination); note creation/editing and user creation open a Dialog, deletions use a themed confirmation dialog instead of `window.confirm`, and every list uses the shadcn Pagination UI (12 notes per page on All notes)
+- Tailwind CSS v4 utilities and shadcn/ui components (Card, Button, Input, Label, Textarea, Select, Tabs, Badge, Alert, Separator, Dialog, AlertDialog, Pagination); note creation/editing and user creation/editing open a Dialog, deletions use a themed confirmation dialog instead of `window.confirm`, and every list uses the shadcn Pagination UI (12 notes per page on All notes)
 
 ## Styling
 

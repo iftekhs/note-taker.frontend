@@ -74,8 +74,8 @@ const groups = [
   },
 ];
 
-function mockAdminApi({ userList = users, noteList = notes, groupList = groups } = {}) {
-  api.mockImplementation(async (path, options = {}) => {
+function adminApiImplementation({ userList = users, noteList = notes, groupList = groups } = {}) {
+  return async (path, options = {}) => {
     if (path === '/users' && !options.method && options.params?.limit === 10) {
       return { data: userList, total: userList.length, totalPages: 1 };
     }
@@ -92,7 +92,11 @@ function mockAdminApi({ userList = users, noteList = notes, groupList = groups }
       return { data: groupList, total: groupList.length, totalPages: 1 };
     }
     throw new Error(`Unexpected API call: ${options.method || 'GET'} ${path}`);
-  });
+  };
+}
+
+function mockAdminApi(options) {
+  api.mockImplementation(adminApiImplementation(options));
 }
 
 beforeEach(() => {
@@ -139,19 +143,25 @@ describe('UsersSection', () => {
     );
   });
 
-  it('edits a user role, name, and interests', async () => {
+  it('edits a user role, name, and interests in a dialog', async () => {
     render(<UsersSection />);
     await screen.findByText('Alice');
 
     const card = screen.getByText('Alice').closest('[data-slot="card"]');
     await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
 
-    const name = await within(card).findByLabelText('Name');
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Edit user' })).toBeInTheDocument();
+
+    const name = within(dialog).getByLabelText('Name');
     await userEvent.clear(name);
     await userEvent.type(name, 'Alice Updated');
-    await userEvent.selectOptions(within(card).getByLabelText('Role'), 'admin');
+    await userEvent.selectOptions(within(dialog).getByLabelText('Role'), 'admin');
+    await userEvent.clear(within(dialog).getByLabelText('Interests'));
+    await userEvent.type(within(dialog).getByLabelText('Interests'), 'tech, travel, music');
+    await userEvent.type(within(dialog).getByLabelText('New password (optional)'), 'NewPassword123');
 
-    await userEvent.click(within(card).getByRole('button', { name: 'Save' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
     await waitFor(() =>
       expect(api).toHaveBeenCalledWith('/users/u1', {
         method: 'PUT',
@@ -159,10 +169,47 @@ describe('UsersSection', () => {
           name: 'Alice Updated',
           email: 'alice@example.com',
           role: 'admin',
-          interests: ['tech', 'music'],
+          interests: ['tech', 'travel', 'music'],
+          password: 'NewPassword123',
         },
       }),
     );
+  });
+
+  it('closes the edit dialog without saving when cancelled', async () => {
+    render(<UsersSection />);
+    await screen.findByText('Alice');
+
+    const card = screen.getByText('Alice').closest('[data-slot="card"]');
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(api).not.toHaveBeenCalledWith('/users/u1', { method: 'PUT', body: expect.anything() });
+  });
+
+  it('shows update errors in the edit dialog and keeps it open', async () => {
+    const baseApi = adminApiImplementation();
+    api.mockImplementation(async (path, options = {}) => {
+      if (path === '/users/u1' && options.method === 'PUT') {
+        throw new Error('Email already in use');
+      }
+      return baseApi(path, options);
+    });
+
+    render(<UsersSection />);
+    await screen.findByText('Alice');
+
+    const card = screen.getByText('Alice').closest('[data-slot="card"]');
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit' }));
+
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }));
+
+    expect(await within(dialog).findByText('Email already in use')).toBeInTheDocument();
+    expect(within(dialog).getByRole('heading', { name: 'Edit user' })).toBeInTheDocument();
   });
 
   it('deletes a user after confirmation', async () => {
@@ -172,6 +219,7 @@ describe('UsersSection', () => {
     const card = screen.getByText('Alice').closest('[data-slot="card"]');
     await userEvent.click(within(card).getByRole('button', { name: 'Delete' }));
     const alert = await screen.findByRole('alertdialog');
+    expect(within(alert).getByText(/notes and posts will also be deleted/i)).toBeInTheDocument();
     await userEvent.click(within(alert).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(api).toHaveBeenCalledWith('/users/u1', { method: 'DELETE' }));
   });

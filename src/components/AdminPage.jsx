@@ -85,6 +85,7 @@ export function UsersSection() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [editError, setEditError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
@@ -111,6 +112,23 @@ export function UsersSection() {
     setCreateOpen(false);
     setCreateForm(EMPTY_CREATE_FORM);
     setCreateError('');
+  }
+
+  function openEdit(user) {
+    setEditing({
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      interests: (user.interests ?? []).join(', '),
+      password: '',
+    });
+    setEditError('');
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setEditError('');
   }
 
   async function create(event) {
@@ -141,7 +159,7 @@ export function UsersSection() {
   async function saveEdit(event) {
     event.preventDefault();
     setBusy(true);
-    setError('');
+    setEditError('');
     try {
       const body = {
         name: editing.name,
@@ -151,10 +169,10 @@ export function UsersSection() {
       };
       if (editing.password) body.password = editing.password;
       await api(`/users/${editing.id}`, { method: 'PUT', body });
-      setEditing(null);
+      closeEdit();
       await load();
     } catch (err) {
-      setError(errorMessage(err));
+      setEditError(errorMessage(err));
     } finally {
       setBusy(false);
     }
@@ -242,104 +260,91 @@ export function UsersSection() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => { if (!open) closeEdit(); }}>
+        {editing && (
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Edit user</DialogTitle>
+              <DialogDescription>Update account details and role for {editing.email}.</DialogDescription>
+            </DialogHeader>
+            <form id="edit-user-form" onSubmit={saveEdit} className="grid gap-4 sm:grid-cols-2">
+              <Field id="edit-name" label="Name">
+                <Input
+                  id="edit-name"
+                  value={editing.name}
+                  onChange={editField('name')}
+                  required
+                />
+              </Field>
+              <Field id="edit-email" label="Email">
+                <Input
+                  id="edit-email"
+                  type="email"
+                  value={editing.email}
+                  onChange={editField('email')}
+                  required
+                />
+              </Field>
+              <Field id="edit-role" label="Role">
+                <RoleSelect
+                  id="edit-role"
+                  value={editing.role}
+                  onValueChange={(value) => setEditing((current) => ({ ...current, role: value }))}
+                />
+              </Field>
+              <Field id="edit-interests" label="Interests">
+                <Input
+                  id="edit-interests"
+                  value={editing.interests}
+                  onChange={editField('interests')}
+                />
+              </Field>
+              <Field id="edit-password" label="New password (optional)" className="sm:col-span-2">
+                <Input
+                  id="edit-password"
+                  type="password"
+                  value={editing.password}
+                  onChange={editField('password')}
+                  minLength={8}
+                  maxLength={72}
+                />
+              </Field>
+            </form>
+            <FormError message={editError} />
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeEdit}>Cancel</Button>
+              <Button type="submit" form="edit-user-form" disabled={busy}>
+                {busy ? 'Saving…' : 'Save changes'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        )}
+      </Dialog>
+
       <FormError message={error} />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {result.data.map((user) => (
           <Card key={user._id}>
-            {editing?.id === user._id ? (
-              <form onSubmit={saveEdit}>
-                <CardHeader>
-                  <CardTitle>Edit user</CardTitle>
-                  <CardDescription>{user.email}</CardDescription>
-                </CardHeader>
-                <CardContent className="grid gap-3">
-                  <Field id={`edit-name-${user._id}`} label="Name">
-                    <Input
-                      id={`edit-name-${user._id}`}
-                      value={editing.name}
-                      onChange={editField('name')}
-                      required
-                    />
-                  </Field>
-                  <Field id={`edit-email-${user._id}`} label="Email">
-                    <Input
-                      id={`edit-email-${user._id}`}
-                      type="email"
-                      value={editing.email}
-                      onChange={editField('email')}
-                      required
-                    />
-                  </Field>
-                  <Field id={`edit-role-${user._id}`} label="Role">
-                    <RoleSelect
-                      id={`edit-role-${user._id}`}
-                      value={editing.role}
-                      onValueChange={(value) => setEditing((current) => ({ ...current, role: value }))}
-                    />
-                  </Field>
-                  <Field id={`edit-interests-${user._id}`} label="Interests">
-                    <Input
-                      id={`edit-interests-${user._id}`}
-                      value={editing.interests}
-                      onChange={editField('interests')}
-                    />
-                  </Field>
-                  <Field id={`edit-password-${user._id}`} label="New password (optional)">
-                    <Input
-                      id={`edit-password-${user._id}`}
-                      type="password"
-                      value={editing.password}
-                      onChange={editField('password')}
-                      minLength={8}
-                      maxLength={72}
-                    />
-                  </Field>
-                </CardContent>
-                <CardFooter className="justify-end gap-2">
-                  <Button type="submit" size="sm" disabled={busy}>Save</Button>
-                  <Button type="button" size="sm" variant="outline" onClick={() => setEditing(null)}>
-                    Cancel
-                  </Button>
-                </CardFooter>
-              </form>
-            ) : (
-              <>
-                <CardHeader>
-                  <CardTitle className="text-base">{user.name}</CardTitle>
-                  <CardDescription>{user.email}</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role}</Badge>
-                  <InterestBadges interests={user.interests} />
-                </CardContent>
-                <CardFooter className="justify-end gap-2">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setEditing({
-                        id: user._id,
-                        name: user.name,
-                        email: user.email,
-                        role: user.role,
-                        interests: (user.interests ?? []).join(', '),
-                        password: '',
-                      })
-                    }
-                  >
-                    Edit
-                  </Button>
-                  <ConfirmDialog
-                    trigger={<Button type="button" size="sm" variant="destructive">Delete</Button>}
-                    title={`Delete ${user.email}?`}
-                    description="Their notes and posts will remain in the database. This action cannot be undone."
-                    onConfirm={() => remove(user)}
-                  />
-                </CardFooter>
-              </>
-            )}
+            <CardHeader>
+              <CardTitle className="text-base">{user.name}</CardTitle>
+              <CardDescription>{user.email}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>{user.role}</Badge>
+              <InterestBadges interests={user.interests} />
+            </CardContent>
+            <CardFooter className="justify-end gap-2">
+              <Button type="button" size="sm" variant="outline" onClick={() => openEdit(user)}>
+                Edit
+              </Button>
+              <ConfirmDialog
+                trigger={<Button type="button" size="sm" variant="destructive">Delete</Button>}
+                title={`Delete ${user.email}?`}
+                description="Their notes and posts will also be deleted. This action cannot be undone."
+                onConfirm={() => remove(user)}
+              />
+            </CardFooter>
           </Card>
         ))}
       </div>
